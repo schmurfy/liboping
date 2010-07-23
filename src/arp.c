@@ -117,12 +117,15 @@ int arp_ping_send(pingobj_t *pingobj, pinghost_t *ph) {
   }
   
   ph->latency = -1.0;
+  ph->timeout_reached = 0;
   
   // send packet
   if( libnet_write(pingobj->ln) == -1 ) {
     dprintf("libnet_write: %s", libnet_geterror(pingobj->ln));
     return -1;
   }
+  
+  dprintf("ARP SENT\n");
   
   libnet_clear_packet(pingobj->ln);
   return 0;
@@ -135,31 +138,34 @@ int arp_ping_send(pingobj_t *pingobj, pinghost_t *ph) {
 //
 void arp_pings_recv(pingobj_t *pingobj) {
   const uint8_t               *data;
-  struct pcap_pkthdr          pkthdr;
+  struct pcap_pkthdr          *pkthdr;
   pinghost_t                  *host;
   uint32_t                    ip;
   struct libnet_ethernet_hdr  *heth;
   struct libnet_arp_hdr       *harp;
   struct timeval              diff;
   struct timeval              timeout, nowtime;
-  
+  int                         tmp;
   int                         break_loop;
-  
-  if( gettimeofday(&nowtime, NULL) == -1 ) {
-    dprintf("gettimeofday: %s\n", strerror(errno));
-    return;
-  }
   
   /* Set up timeout */
   timeout.tv_sec = (time_t) pingobj->timeout;
   timeout.tv_usec = (suseconds_t) (1000000 * (pingobj->timeout - ((double) timeout.tv_sec)));
   
   while (1) {
-    data = pcap_next(pingobj->pcap, &pkthdr);
-    if( data == NULL ) {
+    tmp = pcap_next_ex(pingobj->pcap, &pkthdr, &data);
+    if( tmp == -1 ) {
       dprintf("pcap_next returned NULL !\n");
+      printf("pcap_next_ex: %s", pcap_geterr(pingobj->pcap));
       continue;
     }
+    
+    if( gettimeofday(&nowtime, NULL) == -1 ) {
+      dprintf("gettimeofday: %s\n", strerror(errno));
+      return;
+    }
+    
+    dprintf("pcap_next_ex: %d\n", tmp);
     
     heth = (void*) data;
     harp = (void*)((char*)heth + LIBNET_ETH_H);
@@ -169,7 +175,7 @@ void arp_pings_recv(pingobj_t *pingobj) {
     // check if the arp reply comes from a known host
     for(host = pingobj->head; host != NULL; host = host->next) {
       
-      timersub(&pkthdr.ts, host->timer, &diff);
+      timersub(&pkthdr->ts, host->timer, &diff);
       
       if( (host->latency >= 0.0) || (host->timeout_reached == 1) ) {
         continue;
@@ -177,8 +183,8 @@ void arp_pings_recv(pingobj_t *pingobj) {
       
       if( ((struct sockaddr_in *) host->addr)->sin_addr.s_addr == ip ) {
         // we found a matching host, compute latency
-        host->latency  = ((double) diff.tv_usec) / 1000000.0;
-        host->latency += ((double) diff.tv_sec);
+        host->latency  = ((double) diff.tv_usec) / 1000.0;
+        host->latency += ((double) diff.tv_sec) * 1000.0;
         
         dprintf("received ARP REPLY for %s\n", inet_ntoa( *((struct in_addr *) &ip)) );
       }
@@ -187,7 +193,7 @@ void arp_pings_recv(pingobj_t *pingobj) {
       
       dprintf("timeout state: %f > %f\n", (diff.tv_sec * 1000.0) + (diff.tv_usec / 1000.0), pingobj->timeout*1000);
       
-      if( ((double)diff.tv_sec + (diff.tv_usec / 1000000)) > pingobj->timeout ) {
+      if( (diff.tv_sec * 1000.0) + (diff.tv_usec / 1000.0) > pingobj->timeout*1000 ) {
         host->timeout_reached = 1;
       }
     }
@@ -196,6 +202,7 @@ void arp_pings_recv(pingobj_t *pingobj) {
     break_loop = 1;
     for(host = pingobj->head; host != NULL; host = host->next) {
       if( (host->timeout_reached == 0) && (host->latency < 0.0) ) {
+        dprintf("still okay: %d / %f\n", host->timeout_reached, host->latency);
         break_loop = 0;
         break;
       }
