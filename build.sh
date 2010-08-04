@@ -52,8 +52,9 @@ fi
 
 set -x
 
-autoheader \
-&& aclocal \
-&& $libtoolize --ltdl --copy --force \
-&& automake --add-missing --copy \
-&& autoconf
+autoheader
+aclocal
+$libtoolize --ltdl --copy --force
+automake --add-missing --copy
+autoconf
+
