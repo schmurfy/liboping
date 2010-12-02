@@ -183,8 +183,7 @@ void arp_pings_recv(pingobj_t *pingobj) {
       
       if( ((struct sockaddr_in *) host->addr)->sin_addr.s_addr == ip ) {
         // we found a matching host, compute latency
-        host->latency  = ((double) diff.tv_usec) / 1000.0;
-        host->latency += ((double) diff.tv_sec) * 1000.0;
+        host->latency  = (double) ((diff.tv_usec / 1000) + (diff.tv_sec * 1000));
         
         dprintf("received ARP REPLY for %s\n", inet_ntoa( *((struct in_addr *) &ip)) );
       }

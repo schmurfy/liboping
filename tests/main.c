@@ -58,6 +58,10 @@ int main (int argc, char const *argv[])
     }
   }
   
+  freeifaddrs(addrs);
+  
+  strncpy((char *)source_address, "10.13.9.9", INET_ADDRSTRLEN);
+  
   if( found == false ) {
     FUNCTION_ERROR("Unable to find address for interface <%s>", argv[1]);
   }

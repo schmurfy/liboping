@@ -1159,7 +1159,9 @@ int ping_setopt (pingobj_t *obj, int option, void *value)
 					ai_list->ai_addrlen);
 			obj->srcaddrlen = ai_list->ai_addrlen;
 			obj->addrfamily = ai_list->ai_family;
-
+      
+      dprintf("Using %s.\n", inet_ntoa( ((struct sockaddr_in *) obj->srcaddr)->sin_addr ));
+      
 			freeaddrinfo (ai_list);
 		} /* case PING_OPT_SOURCE */
 		break;
